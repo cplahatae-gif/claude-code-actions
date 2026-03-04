@@ -1,0 +1,200 @@
+name: "GenAI 기초 수업 - 주간 읽기자료"
+
+# 매주 월요일 KST 오전 6시 자동 실행
+# 생성형 인공지능 기초 수업용 주간 학습자료 큐레이션
+
+on:
+  schedule:
+    - cron: "0 21 * * 0"  # UTC 일요일 21:00 = KST 월요일 06:00
+
+  workflow_dispatch:
+    inputs:
+      week_topic:
+        description: "이번 주 수업 주제 (비워두면 자동 선택)"
+        required: false
+        type: string
+      focus_area:
+        description: "집중 분야"
+        required: false
+        type: choice
+        default: "auto"
+        options:
+          - auto
+          - LLM 기초와 원리
+          - 프롬프트 엔지니어링
+          - RAG와 벡터 검색
+          - AI 에이전트
+          - 멀티모달 AI
+          - AI 윤리와 거버넌스
+          - AI 활용 실습
+
+jobs:
+  weekly-reading:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create MCP Config
+        run: |
+          cat > /tmp/mcp-config.json << 'MCPEOF'
+          {
+            "mcpServers": {
+              "sequential-thinking": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+              },
+              "fetch": {
+                "command": "npx",
+                "args": ["-y", "@anthropics/mcp-server-fetch"]
+              }
+            }
+          }
+          MCPEOF
+
+      - name: Generate Weekly Reading Materials
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: |
+            --mcp-config /tmp/mcp-config.json
+            --dangerously-skip-permissions
+
+          prompt: |
+            You are a teaching assistant for a graduate-level course:
+            **"생성형 인공지능 기초" (Fundamentals of Generative AI)**
+            at CHA University AI Convergence Graduate School.
+
+            Instructor: 구요한 교수
+            Students: 대학원생 (AI융합학과)
+            Language: Korean with English technical terms preserved
+
+            ## This Week
+            - Topic: ${{ github.event.inputs.week_topic || 'auto-select based on course progression' }}
+            - Focus: ${{ github.event.inputs.focus_area || 'auto' }}
+
+            ## Auto-Select Logic
+            If topic is auto-select, check the existing weekly files in output/genai-class/
+            to determine what weeks have been covered, then pick the next logical topic from:
+            1. LLM의 작동 원리 (Transformer, Attention, Tokenization)
+            2. 프롬프트 엔지니어링 (Zero-shot, Few-shot, Chain-of-Thought)
+            3. RAG와 벡터 검색 (Embedding, Vector DB, Retrieval)
+            4. AI 에이전트 (Tool Use, Planning, Multi-agent)
+            5. 멀티모달 AI (Vision, Audio, Video generation)
+            6. Fine-tuning과 RLHF
+            7. AI 윤리, 편향, 거버넌스
+            8. 산업별 AI 활용 사례
+            9. AI 프로덕트 설계와 UX
+            10. 최신 트렌드와 미래 전망
+
+            ## Task: 주간 읽기자료 패키지 생성
+
+            ### Step 1: 리서치
+            Use WebSearch to find:
+            - 최신 뉴스/블로그 (지난 2주 이내) 관련 기사 5-8개
+            - 핵심 개념 설명 자료 (튜토리얼, 공식 문서) 3-5개
+            - 한국어 자료 2-3개 (있으면)
+            - 실습/데모 링크 1-2개
+            - 추천 유튜브 영상 1-2개 (있으면)
+
+            Use fetch MCP to get details from the top sources.
+
+            ### Step 2: 읽기자료 패키지 작성
+
+            ```markdown
+            # 📖 생성형 인공지능 기초 - Week N: [주제]
+            **날짜**: YYYY-MM-DD (월) | **담당교수**: 구요한
+
+            ---
+
+            ## 🎯 이번 주 학습 목표
+            이번 주 수업을 듣기 전에 아래 자료를 읽어오세요.
+            - 목표 1
+            - 목표 2
+            - 목표 3
+
+            ---
+
+            ## 📚 필수 읽기 (수업 전 반드시 읽어올 것)
+
+            ### 1. [제목](URL)
+            > **분량**: ~N분 | **언어**: 한국어/영어 | **난이도**: ★☆☆/★★☆/★★★
+            >
+            > 한줄 요약과 왜 읽어야 하는지 설명 (2-3문장)
+
+            ### 2. ...
+            ### 3. ...
+
+            ---
+
+            ## 📰 이번 주 뉴스 & 트렌드
+
+            | # | 제목 | 핵심 내용 | 링크 |
+            |---|------|----------|------|
+            | 1 | ... | 1줄 요약 | [읽기](url) |
+            | 2 | ... | ... | ... |
+            | 3 | ... | ... | ... |
+
+            ---
+
+            ## 🔑 핵심 용어 정리
+
+            | 용어 | 정의 | 예시 |
+            |------|------|------|
+            | Term 1 | ... | ... |
+            | Term 2 | ... | ... |
+
+            ---
+
+            ## 🎬 추천 영상 (선택)
+            - [제목](URL) - N분, 한줄 설명
+
+            ---
+
+            ## 🤔 생각해볼 질문 (수업 토론용)
+            1. 질문 1 (개방형, 토론 유도)
+            2. 질문 2
+            3. 질문 3
+
+            ---
+
+            ## 🛠 실습 미리보기
+            > 이번 주 수업에서 다룰 실습 내용입니다. 미리 환경을 준비해오세요.
+            - 준비물 1
+            - 준비물 2
+
+            ---
+            *이 자료는 AI Teaching Assistant가 자동으로 큐레이션했습니다.*
+            *문의: 구요한 교수*
+            ```
+
+            ### Step 3: 저장 및 커밋
+            ```bash
+            mkdir -p output/genai-class
+            ```
+
+            Determine the week number by counting existing files + 1.
+            Save as: output/genai-class/week-NN-YYYY-MM-DD.md
+
+            ```bash
+            git config user.name "Claude Code Bot"
+            git config user.email "claude-bot@github-actions"
+            git add output/genai-class/
+            git commit -m "📖 GenAI 기초 Week N: [주제] - 주간 읽기자료"
+            git push origin main
+            ```
+
+            ## Quality Standards
+            - [ ] 필수 읽기 3개 이상 (실제 유효한 URL)
+            - [ ] 뉴스/트렌드 3개 이상 (최근 2주 이내)
+            - [ ] 핵심 용어 5개 이상
+            - [ ] 토론 질문 3개 (개방형)
+            - [ ] 한국어 작성 + 영어 전문용어 보존
+            - [ ] 대학원생 수준에 적합한 난이도
+            - [ ] 각 자료에 예상 읽기 시간 표시
