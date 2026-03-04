@@ -133,7 +133,7 @@ jobs:
       - name: Run Claude Code
         uses: anthropics/claude-code-action@v1
         with:
-          direct_prompt: ${{ github.event.inputs.prompt }}
+          prompt: ${{ github.event.inputs.prompt }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           allowed_tools: "Bash,Read,Write,Edit,Glob,Grep,mcp__sequential-thinking__sequentialthinking,mcp__fetch__fetch,mcp__chrome-devtools__take_screenshot,mcp__chrome-devtools__click,mcp__chrome-devtools__fill,mcp__chrome-devtools__navigate_page,mcp__chrome-devtools__take_snapshot"
 
