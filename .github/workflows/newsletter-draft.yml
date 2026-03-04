@@ -1,0 +1,125 @@
+name: "Newsletter Draft (더배러)"
+
+# 뉴스레터 초안 생성기 - 더배러 스타일
+# 주제/소스 URL 입력 → 웹 리서치 → 더배러 톤으로 초안 작성
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "뉴스레터 주제 (예: AI 시대의 학습법 변화)"
+        required: true
+        type: string
+      source_urls:
+        description: "참고 URL (쉼표 구분, 선택사항)"
+        required: false
+        type: string
+      tone:
+        description: "톤 선택"
+        required: false
+        type: choice
+        default: "insight"
+        options:
+          - insight
+          - humor
+          - serious
+
+jobs:
+  generate-draft:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify Chrome
+        run: google-chrome --version
+
+      - name: Create MCP Config
+        run: |
+          cat > /tmp/mcp-config.json << 'MCPEOF'
+          {
+            "mcpServers": {
+              "sequential-thinking": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+              },
+              "fetch": {
+                "command": "npx",
+                "args": ["-y", "@anthropics/mcp-server-fetch"]
+              },
+              "chrome-devtools": {
+                "command": "npx",
+                "args": ["-y", "chrome-devtools-mcp@latest", "--headless"]
+              }
+            }
+          }
+          MCPEOF
+
+      - name: Generate Newsletter Draft
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: |
+            --mcp-config /tmp/mcp-config.json
+            --dangerously-skip-permissions
+
+          prompt: |
+            You are a newsletter writer for "더배러 (The Better)" newsletter by 구요한 (Yohan Koo).
+
+            ## Writing Style Guide
+            - 더배러는 지식 노동자를 위한 뉴스레터
+            - 톤: ${{ github.event.inputs.tone }}
+              - insight: 통찰력 있는 분석, 핵심 인사이트 중심
+              - humor: 유머러스하고 위트 있는 톤
+              - serious: 진지하고 깊이 있는 논의
+            - 구어체와 문어체를 적절히 섞어 사용
+            - 독자에게 말을 거는 듯한 친근한 어투
+            - 복잡한 개념을 쉽게 풀어서 설명
+            - 실용적 인사이트와 액션 아이템 포함
+
+            ## Task
+            주제: ${{ github.event.inputs.topic }}
+            참고 URL: ${{ github.event.inputs.source_urls || '없음 - 웹 리서치로 대체' }}
+
+            ## Steps
+
+            1. **리서치**
+               - 주어진 참고 URL이 있으면 fetch MCP로 내용 수집
+               - WebSearch로 관련 최신 자료 5-10개 추가 수집
+               - 핵심 데이터, 통계, 인용구 정리
+
+            2. **구조 설계**
+               뉴스레터 구조:
+               - 🎯 한줄 요약 (제목 아래)
+               - 📌 오프닝 (독자 관심 끌기, 2-3문단)
+               - 💡 본문 (3-4개 섹션, 각 2-3문단)
+                 - 각 섹션에 소제목
+                 - 데이터/사례 포함
+               - 🔑 핵심 테이크어웨이 (3-5개 bullet)
+               - ✍️ 에디터 노트 (개인적 의견/경험)
+               - 📚 참고 자료 (링크 목록)
+
+            3. **초안 작성**
+               - 총 분량: 1,500-2,500자 (한국어)
+               - 영어 전문 용어는 그대로 사용
+               - 이모지 적절히 활용 (과하지 않게)
+
+            4. **저장**
+               ```bash
+               mkdir -p output/newsletter
+               ```
+               Save as: output/newsletter/$(date +%Y-%m-%d)-draft.md
+
+               ```bash
+               git config user.name "Claude Code Bot"
+               git config user.email "claude-bot@github-actions"
+               git add output/newsletter/
+               git commit -m "📝 Newsletter draft: ${{ github.event.inputs.topic }}"
+               git push origin main
+               ```

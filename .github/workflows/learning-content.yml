@@ -1,0 +1,140 @@
+name: "Weekly Learning Content Generator"
+
+# 매주 교육 콘텐츠 자동 생성 (퀴즈, 요약, 실습 문제)
+# KST 일요일 오전 10시 자동 실행 + 수동 실행 가능
+
+on:
+  schedule:
+    - cron: "0 1 * * 0"  # UTC 01:00 Sunday = KST 10:00 Sunday
+
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "학습 주제 (예: Prompt Engineering 기초)"
+        required: true
+        type: string
+      difficulty:
+        description: "난이도"
+        required: false
+        type: choice
+        default: "intermediate"
+        options:
+          - beginner
+          - intermediate
+          - advanced
+      format:
+        description: "콘텐츠 형식"
+        required: false
+        type: choice
+        default: "full"
+        options:
+          - full
+          - quiz-only
+          - summary-only
+
+jobs:
+  generate-content:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create MCP Config
+        run: |
+          cat > /tmp/mcp-config.json << 'MCPEOF'
+          {
+            "mcpServers": {
+              "sequential-thinking": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+              },
+              "fetch": {
+                "command": "npx",
+                "args": ["-y", "@anthropics/mcp-server-fetch"]
+              }
+            }
+          }
+          MCPEOF
+
+      - name: Generate Learning Content
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: |
+            --mcp-config /tmp/mcp-config.json
+            --dangerously-skip-permissions
+
+          prompt: |
+            You are an educational content designer for university-level and corporate training.
+
+            ## Task
+            Generate learning content for the following:
+            - Topic: ${{ github.event.inputs.topic || 'auto-select: trending topic in AI/Education/KM' }}
+            - Difficulty: ${{ github.event.inputs.difficulty || 'intermediate' }}
+            - Format: ${{ github.event.inputs.format || 'full' }}
+
+            ## Auto-Select Logic (when no topic provided)
+            If topic is 'auto-select', use WebSearch to find a trending topic in:
+            - AI literacy and prompt engineering
+            - Knowledge management methodologies
+            - Digital transformation in education
+            - Generative AI tools and workflows
+            Pick the most interesting and timely topic.
+
+            ## Content Structure (Full Format)
+
+            ### 1. 학습 목표 (Learning Objectives)
+            - 3-5 clear, measurable objectives
+            - Written in Korean
+
+            ### 2. 핵심 개념 요약 (Key Concepts)
+            - 5-7 key concepts with definitions
+            - Each concept: term, definition, example, relevance
+            - Use tables for structured data
+
+            ### 3. 심화 학습 자료 (Deep Dive)
+            - 3-4 sections explaining the topic in depth
+            - Include real-world examples and case studies
+            - Reference actual tools, papers, or products
+
+            ### 4. 실습 과제 (Practice Exercises)
+            - 3 hands-on exercises (easy → hard)
+            - Each with: instructions, expected outcome, hints
+            - At least 1 exercise using AI tools
+
+            ### 5. 퀴즈 (Quiz)
+            - 10 multiple choice questions
+            - 5 true/false questions
+            - 3 short answer questions
+            - Answer key with explanations at the end
+
+            ### 6. 추가 자료 (Additional Resources)
+            - 5 recommended readings/videos with URLs
+            - 3 related tools to explore
+
+            ## Save and Commit
+            ```bash
+            mkdir -p output/learning
+            ```
+            - If topic was auto-selected, use a slug of the topic name
+            - Save as: output/learning/$(date +%Y-%m-%d)-{topic-slug}.md
+
+            ```bash
+            git config user.name "Claude Code Bot"
+            git config user.email "claude-bot@github-actions"
+            git add output/learning/
+            git commit -m "📚 Learning content: $(date +%Y-%m-%d)"
+            git push origin main
+            ```
+
+            ## Quality Standards
+            - Content in Korean, technical terms in English
+            - University level quality (CHA graduate school standard)
+            - Cite real sources with working URLs
+            - Include practical, actionable exercises

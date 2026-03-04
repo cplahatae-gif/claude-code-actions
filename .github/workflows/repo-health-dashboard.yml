@@ -1,0 +1,89 @@
+name: "Multi-Repo Health Dashboard"
+
+# 매주 월요일 Git 연결된 레포들의 상태를 종합 대시보드로 생성
+# KST 월요일 오전 9시 자동 실행
+
+on:
+  schedule:
+    - cron: "0 0 * * 1"  # UTC 00:00 Monday = KST 09:00 Monday
+
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Health Check
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: "--dangerously-skip-permissions"
+
+          prompt: |
+            You are a repository health checker for the GitHub user johnfkoo951.
+
+            ## Task
+            Generate a weekly health dashboard for all repositories.
+
+            ## Steps
+
+            1. List all repos:
+               ```bash
+               gh repo list johnfkoo951 --limit 50 --json name,description,updatedAt,isArchived,pushedAt,stargazerCount,defaultBranchRef --jq '.[] | select(.isArchived == false)'
+               ```
+
+            2. For each active repo, gather:
+               - Last commit date and message
+               - Open issues count: `gh api repos/johnfkoo951/{repo}/issues?state=open --jq 'length'`
+               - Open PRs count: `gh api repos/johnfkoo951/{repo}/pulls?state=open --jq 'length'`
+               - Has CI/CD (check for .github/workflows)
+               - Has README
+               - Primary language
+
+            3. Generate a markdown dashboard with:
+
+               ## 📊 Weekly Repository Health Dashboard
+               Date: YYYY-MM-DD
+
+               ### Summary Table
+               | Repo | Last Push | Issues | PRs | CI/CD | Language | Health |
+               |------|-----------|--------|-----|-------|----------|--------|
+
+               Health score: 🟢 (active, CI, docs) / 🟡 (stale or missing CI) / 🔴 (very stale or issues)
+
+               ### 🔴 Needs Attention
+               - Repos with no commits in 30+ days
+               - Repos with open issues but no recent activity
+
+               ### 📈 Most Active
+               - Top 5 repos by recent commits
+
+               ### 💡 Recommendations
+               - Repos that need CI/CD setup
+               - Repos missing README
+               - Stale issues/PRs to close
+
+            4. Save and commit:
+               ```bash
+               mkdir -p output/repo-health
+               ```
+               Save as: output/repo-health/$(date +%Y-%m-%d).md
+
+               ```bash
+               git config user.name "Claude Code Bot"
+               git config user.email "claude-bot@github-actions"
+               git add output/repo-health/
+               git commit -m "📊 Repo health dashboard: $(date +%Y-%m-%d)"
+               git push origin main
+               ```

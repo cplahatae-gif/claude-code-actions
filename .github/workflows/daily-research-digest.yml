@@ -1,0 +1,108 @@
+name: "Daily Research Digest"
+
+# 매일 아침 AI/교육/KM 분야 최신 뉴스를 수집하여 마크다운 리포트 생성
+# KST 오전 7시 자동 실행
+
+on:
+  schedule:
+    - cron: "0 22 * * *"  # UTC 22:00 = KST 07:00 (다음 날)
+
+  workflow_dispatch:
+    inputs:
+      keywords:
+        description: "검색 키워드 (쉼표 구분, 비워두면 기본값 사용)"
+        required: false
+        type: string
+
+jobs:
+  research-digest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify Chrome
+        run: google-chrome --version
+
+      - name: Create MCP Config
+        run: |
+          cat > /tmp/mcp-config.json << 'MCPEOF'
+          {
+            "mcpServers": {
+              "sequential-thinking": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+              },
+              "fetch": {
+                "command": "npx",
+                "args": ["-y", "@anthropics/mcp-server-fetch"]
+              },
+              "chrome-devtools": {
+                "command": "npx",
+                "args": ["-y", "chrome-devtools-mcp@latest", "--headless"]
+              }
+            }
+          }
+          MCPEOF
+
+      - name: Run Research Digest
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: |
+            --mcp-config /tmp/mcp-config.json
+            --dangerously-skip-permissions
+
+          prompt: |
+            You are a research digest curator specializing in AI, Education, and Knowledge Management.
+
+            ## Task
+            Generate a daily research digest covering the latest developments.
+
+            ## Keywords
+            ${{ github.event.inputs.keywords || 'AI education, knowledge management, generative AI, HRD, second brain, PKM, LLM agents' }}
+
+            ## Steps
+            1. Use WebSearch to find 10-15 recent articles/papers about:
+               - AI in education and training
+               - Knowledge management and PKM tools
+               - Generative AI applications (Claude, GPT, etc.)
+               - Human Resource Development (HRD) trends
+               - Second Brain / note-taking innovations
+
+            2. For the top 5 most interesting findings, use fetch MCP to get more details
+
+            3. Generate a markdown digest with:
+               - 📋 Executive Summary (3-5 bullet points)
+               - 🔬 Research & Papers section (academic findings)
+               - 💡 Industry News section (product launches, trends)
+               - 🛠 Tools & Resources section (new tools, updates)
+               - 📊 Weekly Trend Analysis (emerging patterns)
+               - Each item: title, 2-3 sentence summary, source link, relevance tag
+
+            4. Save the file:
+               ```bash
+               mkdir -p output/research-digest
+               ```
+               Save as: output/research-digest/$(date +%Y-%m-%d).md
+
+            5. Commit and push:
+               ```bash
+               git config user.name "Claude Code Bot"
+               git config user.email "claude-bot@github-actions"
+               git add output/research-digest/
+               git commit -m "📚 Research digest: $(date +%Y-%m-%d)"
+               git push origin main
+               ```
+
+            ## Quality Standards
+            - Only include items from the last 7 days
+            - Include actual URLs (not made up)
+            - Write summaries in Korean with English terms preserved
+            - Tag each item: #AI #Education #KM #HRD #PKM #Tools

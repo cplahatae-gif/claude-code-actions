@@ -1,0 +1,117 @@
+name: "Meeting → Action Items"
+
+# 회의록에서 액션 아이템을 자동 추출하여 GitHub Issues로 생성
+
+on:
+  workflow_dispatch:
+    inputs:
+      meeting_notes:
+        description: "회의록 텍스트 (마크다운)"
+        required: true
+        type: string
+      meeting_title:
+        description: "회의 제목"
+        required: true
+        type: string
+      create_issues:
+        description: "GitHub Issues로 자동 생성?"
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  extract-actions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Save meeting notes to file
+        run: |
+          mkdir -p input
+          cat > input/meeting-notes.md << 'NOTESEOF'
+          ${{ github.event.inputs.meeting_notes }}
+          NOTESEOF
+
+      - name: Extract Action Items
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: "--dangerously-skip-permissions"
+
+          prompt: |
+            You are a meeting notes analyst specializing in extracting actionable items.
+
+            ## Task
+            Analyze the meeting notes and extract all action items.
+
+            Meeting Title: ${{ github.event.inputs.meeting_title }}
+            Create Issues: ${{ github.event.inputs.create_issues }}
+
+            ## Steps
+
+            1. Read the meeting notes:
+               ```bash
+               cat input/meeting-notes.md
+               ```
+
+            2. Analyze and extract:
+               - **Action Items**: Tasks with owner, deadline, priority
+               - **Decisions Made**: Key decisions documented
+               - **Follow-ups**: Items needing further discussion
+               - **Key Insights**: Important points mentioned
+
+            3. Generate a structured summary:
+
+               ## 📋 Meeting Summary: ${{ github.event.inputs.meeting_title }}
+               Date: $(date +%Y-%m-%d)
+
+               ### ✅ Action Items
+               | # | Task | Owner | Deadline | Priority | Status |
+               |---|------|-------|----------|----------|--------|
+
+               ### 🔨 Decisions Made
+               - Decision 1...
+
+               ### 🔄 Follow-ups
+               - Follow-up 1...
+
+               ### 💡 Key Insights
+               - Insight 1...
+
+            4. Save the summary:
+               ```bash
+               mkdir -p output/meetings
+               ```
+               Save as: output/meetings/$(date +%Y-%m-%d)-summary.md
+
+            5. If create_issues is true, create GitHub Issues for each action item:
+               ```bash
+               gh issue create --title "ACTION: {task description}" \
+                 --body "From meeting: ${{ github.event.inputs.meeting_title }}
+               Owner: {owner}
+               Deadline: {deadline}
+               Priority: {priority}" \
+                 --label "meeting-action"
+               ```
+               Create the "meeting-action" label first if it doesn't exist:
+               ```bash
+               gh label create "meeting-action" --color "0E8A16" --description "Action item from meeting" 2>/dev/null || true
+               ```
+
+            6. Commit:
+               ```bash
+               git config user.name "Claude Code Bot"
+               git config user.email "claude-bot@github-actions"
+               git add output/meetings/ input/
+               git commit -m "📋 Meeting actions: ${{ github.event.inputs.meeting_title }}"
+               git push origin main
+               ```
